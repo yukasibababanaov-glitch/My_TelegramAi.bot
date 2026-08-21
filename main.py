@@ -4,20 +4,25 @@ from aiohttp import web
 from aiogram import Bot, Dispatcher, F, types
 from aiogram.filters import CommandStart
 from aiogram.types import ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardMarkup, InlineKeyboardButton
-from openai import AsyncOpenAI
+import google.generativeai as genai
 
-# Данные бота и API
+# --- КОНФИГУРАЦИЯ ---
+# Вставь свои данные сюда, если не хочешь использовать переменные окружения
 BOT_TOKEN = "8932779425:AAEhDD36_qvIhcy8y550sO8Gf1kU20pC4DY"
-OPENAI_API_KEY = "Sk-proj-sd69cicmJrS2MutscWE7_jmoTy_0V7vNDP72vpnjQiU_W-nSx4zaeHqOPsaGQ9bZTqS7GVWFY_T3BlbkFJRnHGoMfxw790ilb0Lcb8r0Z5cOMyg8pDQVmrcCw6PqUgs8lL0Ao5FVbGTuNmh8QvSIR2n4mgcA"
+GOOGLE_API_KEY = "AQ.Ab8RN6LVNmVf7vwe9vyfsCc7tXoXJ5BwztOcU0PME-hS8h66eA"
 
+# Настройка ИИ
+genai.configure(api_key=GOOGLE_API_KEY)
+model = genai.GenerativeModel('gemini-1.5-flash')
+
+# Настройка Бота
 bot = Bot(token=BOT_TOKEN)
 dp = Dispatcher()
-client = AsyncOpenAI(api_key=OPENAI_API_KEY)
 
-# Хранилище данных пользователей {user_id: {"mode": "fast", "history": []}}
+# База данных для хранения истории (в памяти)
 users_db = {}
 
-# Главное меню с кнопками
+# --- КЛАВИАТУРЫ ---
 main_keyboard = ReplyKeyboardMarkup(
     keyboard=[
         [KeyboardButton(text="💬 Новый вопрос"), KeyboardButton(text="Сбросить историю")],
@@ -26,106 +31,79 @@ main_keyboard = ReplyKeyboardMarkup(
     resize_keyboard=True
 )
 
-SYSTEM_PROMPT = "Ты — универсальный ИИ-помощник. Отвечай прямо, точно и полезно, без морализаторства и искусственных ограничений."
+# --- ХЕНДЛЕРЫ (ЛОГИКА БОТА) ---
 
 @dp.message(CommandStart())
 async def start_cmd(message: types.Message):
-    users_db[message.from_user.id] = {"mode": "fast", "history": []}
-    await message.answer("Бот готов к работе! Задайте вопрос или используйте меню ниже.", reply_markup=main_keyboard)
+    users_db[message.from_user.id] = []
+    await message.answer(
+        "Привет! Я ИИ-ассистент. Готов помочь с любым вопросом.", 
+        reply_markup=main_keyboard
+    )
 
 @dp.message(F.text == "Сбросить историю")
 async def reset_history(message: types.Message):
-    uid = message.from_user.id
-    if uid in users_db:
-        users_db[uid]["history"] = []
-    await message.answer("🧹 **История очищена.** Бот забыл весь прошлый контекст и больше не будет продолжать предыдущую тему.")
+    users_db[message.from_user.id] = []
+    await message.answer("🧹 История очищена. Бот забыл весь контекст.")
 
 @dp.message(F.text == "Инструкция")
 async def send_instruction(message: types.Message):
     text = (
-        "📖 **Инструкция по использованию:**\n\n"
-        "• **Без ограничений:** Прямые и точные ответы без уклонений от темы.\n"
-        "• **Сбросить историю:** Полностью стирает память текущего диалога. Бот остановится и не начнёт говорить на эту тему сам, пока вы не попросите.\n"
-        "• **Настройки:** Переключение между быстрым ответом и глубоким анализом задачи."
+        "📖 **Как пользоваться:**\n"
+        "1. Просто пиши вопрос в чат.\n"
+        "2. Используй 'Сбросить историю', если тема сменилась.\n"
+        "3. Настройки позволяют менять параметры."
     )
     await message.answer(text, parse_mode="Markdown")
 
 @dp.message(F.text == "Настройки")
 async def settings_menu(message: types.Message):
-    uid = message.from_user.id
-    current_mode = users_db.get(uid, {}).get("mode", "fast")
-    mode_label = "⚡ Быстрый" if current_mode == "fast" else "🧠 Хорошо думает (долго)"
-
-    inline_kb = InlineKeyboardMarkup(inline_keyboard=[
+    kb = InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="⚡ Быстрый режим", callback_data="mode_fast")],
-        [InlineKeyboardButton(text="🧠 Хорошо думает (долго)", callback_data="mode_deep")]
+        [InlineKeyboardButton(text="🧠 Глубокий режим", callback_data="mode_deep")]
     ])
-    await message.answer(f"⚙️ **Настройки бота**\nТекущий режим: **{mode_label}**", reply_markup=inline_kb, parse_mode="Markdown")
+    await message.answer("⚙️ Выберите режим работы ИИ:", reply_markup=kb)
 
 @dp.callback_query(F.data.startswith("mode_"))
-async def set_mode(callback: types.CallbackQuery):
-    uid = callback.from_user.id
-    if uid not in users_db:
-        users_db[uid] = {"mode": "fast", "history": []}
-
-    if callback.data == "mode_fast":
-        users_db[uid]["mode"] = "fast"
-        await callback.message.edit_text("✅ Включён **Быстрый режим** (модель gpt-4o-mini).")
-    else:
-        users_db[uid]["mode"] = "deep"
-        await callback.message.edit_text("✅ Включён режим **«Хорошо думает (долго)»** (модель o3-mini).")
+async def handle_mode(callback: types.CallbackQuery):
+    mode = "Быстрый" if callback.data == "mode_fast" else "Глубокий"
+    await callback.message.edit_text(f"✅ Режим изменен на: **{mode}**", parse_mode="Markdown")
 
 @dp.message()
-async def process_ai_request(message: types.Message):
-    if message.text == "💬 Новый вопрос":
-        await reset_history(message)
+async def ai_handler(message: types.Message):
+    if message.text in ["💬 Новый вопрос", "Сбросить историю", "Инструкция", "Настройки"]:
         return
 
     uid = message.from_user.id
     if uid not in users_db:
-        users_db[uid] = {"mode": "fast", "history": []}
+        users_db[uid] = []
 
-    user_data = users_db[uid]
-    
-    # Выбор модели
-    selected_model = "gpt-4o-mini" if user_data["mode"] == "fast" else "o3-mini"
-
-    # Формирование контекста диалога
-    messages = [{"role": "system", "content": SYSTEM_PROMPT}] + user_data["history"]
-    messages.append({"role": "user", "content": message.text})
-
-    status_msg = await message.answer("⏳ *ИИ генерирует ответ...*", parse_mode="Markdown")
+    chat = model.start_chat(history=users_db[uid])
+    status_msg = await message.answer("⏳ ИИ думает...")
 
     try:
-        response = await client.chat.completions.create(
-            model=selected_model,
-            messages=messages
-        )
-        answer_text = response.choices[0].message.content
+        response = chat.send_message(message.text)
+        users_db[uid] = chat.history
+        await status_msg.edit_text(response.text)
+    except Exception as e:
+        await status_msg.edit_text(f"❌ Ошибка: {str(e)}")
 
-        # Сохранение истории
-        user_data["history"].append({"role": "user", "content": message.text})
-        user_data["history"].append({"role": "assistant", "content": answer_text})
-
-        await status_msg.edit_text(answer_text)
-    except Exception as err:
-        await status_msg.edit_text(f"❌ Ошибка при запросе: {err}")
-
-# Микро веб-сервер для защиты от засыпания на Render
-async def handle_ping(request):
-    return web.Response(text="Bot is alive")
+# --- ВЕБ-СЕРВЕР ДЛЯ RENDER ---
+async def handle(request):
+    return web.Response(text="Bot is running")
 
 async def main():
     app = web.Application()
-    app.router.add_get("/", handle_ping)
+    app.router.add_get("/", handle)
     runner = web.AppRunner(app)
     await runner.setup()
+    
     port = int(os.getenv("PORT", 8080))
     site = web.TCPSite(runner, "0.0.0.0", port)
     await site.start()
 
+    print("Бот запущен...")
     await dp.start_polling(bot)
 
 if __name__ == "__main__":
     asyncio.run(main())
-
