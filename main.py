@@ -12,7 +12,7 @@ from aiogram.types import ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardMar
 from openai import AsyncOpenAI
 
 # Токен твоего Telegram-бота
-BOT_TOKEN = "8932779425:AAEhDD36_qvIhcy8y550sO8Gf1kU20pC4DY"
+BOT_TOKEN = "8932779425:AAEH0mqS6olP1cOaYIeB3ibt4u0MvPc7tac"
 
 # Клиент OpenRouter (теперь он автоматически возьмет ключ из os.environ)
 client = AsyncOpenAI(
