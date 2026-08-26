@@ -9,7 +9,7 @@ from aiogram.types import ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardMar
 BOT_TOKEN = "8932779425:AAEH0mqS6olP1cOaYIeB3ibt4u0MvPc7tac"
 
 # ВСТАВЬ СЮДА СВОЙ НОВЫЙ КЛЮЧ С САЙТА OPENROUTER.AI
-OPENROUTER_API_KEY = "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"
+OPENROUTER_API_KEY = "fzQhTEpAFueY552iXnh1GtgF9RDuDiXB"
 
 bot = Bot(token=BOT_TOKEN)
 dp = Dispatcher()
@@ -89,7 +89,7 @@ async def process_ai_request(message: types.Message):
         users_db[uid] = {"mode": "fast", "history": []}
 
     user_data = users_db[uid]
-    selected_model = "deepseek/deepseek-chat" if user_data["mode"] == "fast" else "deepseek/deepseek-r1"
+    selected_model = "cognitivecomputations/dolphin-mistral-24b:free"
 
     messages = [{"role": "system", "content": SYSTEM_PROMPT}] + user_data["history"]
     messages.append({"role": "user", "content": message.text})
