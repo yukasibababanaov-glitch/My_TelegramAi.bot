@@ -1,5 +1,6 @@
 import asyncio
 import os
+import json
 from aiohttp import web, ClientSession
 from aiogram import Bot, Dispatcher, F, types
 from aiogram.filters import CommandStart
@@ -64,7 +65,6 @@ async def process_ai_request(message: types.Message):
 
     status_msg = await message.answer("⏳ Думаю...")
 
-    # Актуальный эндпоинт Hugging Face Router
     url = "https://router.huggingface.co/v1/chat/completions"
     headers = {
         "Authorization": f"Bearer {HF_API_KEY}",
@@ -80,14 +80,27 @@ async def process_ai_request(message: types.Message):
     try:
         async with ClientSession() as session:
             async with session.post(url, headers=headers, json=payload) as resp:
-                data = await resp.json()
+                raw_text = await resp.text()
                 
+                # Безопасный парсинг ответа (если сервер вернул текст, а не JSON)
+                try:
+                    data = json.loads(raw_text)
+                except:
+                    data = {"error": {"message": raw_text}}
+
+                if isinstance(data, str):
+                    data = {"error": {"message": data}}
+
                 if resp.status != 200:
-                    err_msg = data.get("error", {}).get("message", "Неизвестная ошибка")
+                    err_msg = data.get("error", {}).get("message", raw_text[:200])
                     await status_msg.edit_text(f"❌ Ошибка {resp.status}: {err_msg}")
                     return
 
-                answer_text = data["choices"][0]["message"]["content"]
+                # Извлечение ответа
+                if "choices" in data and len(data["choices"]) > 0:
+                    answer_text = data["choices"][0]["message"]["content"]
+                else:
+                    answer_text = str(data)
                 
                 user_data["history"].append({"role": "user", "content": message.text})
                 user_data["history"].append({"role": "assistant", "content": answer_text})
