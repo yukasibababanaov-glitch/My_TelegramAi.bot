@@ -1,18 +1,21 @@
 import asyncio
 import os
+
+# ПРИНУДИТЕЛЬНО записываем ключ в системное окружение, чтобы OpenAI-клиент его точно увидел
+OPENAI_API_KEY = "Sk-or-v1-d8f43cc62ff6c8f7ee15677e04f787829a91f717a135aa8890ad9d36b163054e"
+os.environ["OPENAI_API_KEY"] = OPENAI_API_KEY
+
 from aiohttp import web
 from aiogram import Bot, Dispatcher, F, types
 from aiogram.filters import CommandStart
 from aiogram.types import ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardMarkup, InlineKeyboardButton
 from openai import AsyncOpenAI
 
-# Твои данные (токен и ключ OpenRouter)
+# Токен твоего Telegram-бота
 BOT_TOKEN = "8932779425:AAEhDD36_qvIhcy8y550sO8Gf1kU20pC4DY"
-OPENAI_API_KEY = "Sk-or-v1-d8f43cc62ff6c8f7ee15677e04f787829a91f717a135aa8890ad9d36b163054e"
 
-# Настройка клиента OpenRouter с заголовками (решает ошибку 401)
+# Клиент OpenRouter (теперь он автоматически возьмет ключ из os.environ)
 client = AsyncOpenAI(
-    api_key=OPENAI_API_KEY,
     base_url="https://openrouter.ai/api/v1",
     default_headers={
         "HTTP-Referer": "https://github.com",
@@ -23,7 +26,7 @@ client = AsyncOpenAI(
 bot = Bot(token=BOT_TOKEN)
 dp = Dispatcher()
 
-# Хранилище истории и режимов {user_id: {"mode": "fast", "history": []}}
+# Хранилище истории и режимов
 users_db = {}
 
 # Системный промпт
