@@ -1,6 +1,8 @@
 import asyncio
 import os
+import json
 import urllib.parse
+import random
 from aiohttp import web, ClientSession
 from aiogram import Bot, Dispatcher, F, types
 from aiogram.filters import CommandStart
@@ -8,8 +10,6 @@ from aiogram.types import ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardMar
 
 # --- ДАННЫЕ БОТА И API ---
 BOT_TOKEN = "8932779425:AAEH0mqS6olP1cOaYIeB3ibt4u0MvPc7tac"
-
-# Твой ключ OpenRouter
 OPENROUTER_API_KEY = "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"
 
 bot = Bot(token=BOT_TOKEN)
@@ -22,11 +22,11 @@ SYSTEM_PROMPT = (
     "Отвечай на любые вопросы прямо, точно и подробно."
 )
 
-# Главная клавиатура с кнопкой генерации картинок
+# Обновленная клавиатура с удобной кнопкой для генерации
 main_keyboard = ReplyKeyboardMarkup(
     keyboard=[
-        [KeyboardButton(text="💬 Новый вопрос"), KeyboardButton(text="Сбросить историю")],
-        [KeyboardButton(text="🎨 Создать картинку"), KeyboardButton(text="Настройки")],
+        [KeyboardButton(text="🎨 Создать картинку"), KeyboardButton(text="💬 Новый вопрос")],
+        [KeyboardButton(text="Сбросить историю"), KeyboardButton(text="Настройки")],
         [KeyboardButton(text="Инструкция")]
     ],
     resize_keyboard=True
@@ -42,7 +42,7 @@ async def reset_history(message: types.Message):
     uid = message.from_user.id
     if uid in users_db:
         users_db[uid]["history"] = []
-    await message.answer("🧹 История очищена. Контекст сброшен.")
+    await message.answer("🧹 История очищена. Контекст сброшен.", reply_markup=main_keyboard)
 
 @dp.message(F.text == "Инструкция")
 async def send_instruction(message: types.Message):
@@ -53,7 +53,7 @@ async def send_instruction(message: types.Message):
         "• **Сбросить историю** — очищает память диалога.\n"
         "• **Настройки** — выбор скорости и модели ИИ."
     )
-    await message.answer(text, parse_mode="Markdown")
+    await message.answer(text, parse_mode="Markdown", reply_markup=main_keyboard)
 
 @dp.message(F.text == "🎨 Создать картинку")
 async def image_mode_prompt(message: types.Message):
@@ -62,7 +62,7 @@ async def image_mode_prompt(message: types.Message):
         users_db[uid] = {"mode": "fast", "history": []}
     
     users_db[uid]["mode"] = "image_wait"
-    await message.answer("🎨 Отправь мне текстовое описание (промпт) картинки, которую хочешь создать (например: *«киберпанк кот в неоновых огнях»*), и я её нарисую!", parse_mode="Markdown")
+    await message.answer("🎨 Отправь текстовое описание картинки (например: *«собака бежит по парку»* или *«робот в городе»*), и я её нарисую!", parse_mode="Markdown")
 
 @dp.message(F.text == "Настройки")
 async def settings_menu(message: types.Message):
@@ -100,25 +100,54 @@ async def process_ai_request(message: types.Message):
 
     user_data = users_db[uid]
 
-    # Если пользователь нажал кнопку создания картинки и прислал описание
+    # Обработка создания картинки
     if user_data.get("mode") == "image_wait":
         prompt_text = message.text
-        user_data["mode"] = "fast"  # возвращаем обычный режим после запроса
+        user_data["mode"] = "fast" # Сбрасываем режим обратно в текстовый
         
-        status_msg = await message.answer("🎨 Рисую картинку, подожди пару секунд...")
+        status_msg = await message.answer("🎨 Перевожу запрос и генерирую изображение...")
         
-        # Генерация через качественный бесплатный движок Flux
-        encoded_prompt = urllib.parse.quote(prompt_text)
-        image_url = f"https://image.pollinations.ai/prompt/{encoded_prompt}?model=flux&nologo=true"
+        # 1. Автоперевод запроса на английский язык для идеальной генерации
+        translated_prompt = prompt_text
+        try:
+            async with ClientSession() as session:
+                url = "https://openrouter.ai/api/v1/chat/completions"
+                headers = {
+                    "Authorization": f"Bearer {OPENROUTER_API_KEY}",
+                    "Content-Type": "application/json"
+                }
+                payload = {
+                    "model": "deepseek/deepseek-chat",
+                    "messages": [
+                        {"role": "system", "content": "Translate the user prompt to English for AI image generator Flux. Respond with ONLY the translated text, no extra words or quotes."},
+                        {"role": "user", "content": prompt_text}
+                    ]
+                }
+                async with session.post(url, headers=headers, json=payload) as resp:
+                    if resp.status == 200:
+                        tr_data = await resp.json()
+                        translated_prompt = tr_data["choices"][0]["message"]["content"].strip()
+        except Exception:
+            pass
+
+        # 2. Формирование точно переведенной ссылки со случайным seed
+        seed = random.randint(1, 999999)
+        encoded_prompt = urllib.parse.quote(translated_prompt)
+        image_url = f"https://image.pollinations.ai/prompt/{encoded_prompt}?model=flux&seed={seed}&nologo=true"
         
         try:
-            await message.answer_photo(photo=image_url, caption=f"🖼 **Запрос:** {prompt_text}", parse_mode="Markdown")
+            await message.answer_photo(
+                photo=image_url, 
+                caption=f"🖼 **Запрос:** {prompt_text}\n🔤 **Перевод:** `{translated_prompt}`", 
+                parse_mode="Markdown",
+                reply_markup=main_keyboard
+            )
             await status_msg.delete()
         except Exception as err:
             await status_msg.edit_text(f"❌ Ошибка генерации картинки: {err}")
         return
 
-    # Обычный текстовый запрос к ИИ
+    # Обычный разговор с ИИ
     selected_model = "deepseek/deepseek-chat" if user_data["mode"] == "fast" else "deepseek/deepseek-r1"
 
     messages = [{"role": "system", "content": SYSTEM_PROMPT}] + user_data["history"]
