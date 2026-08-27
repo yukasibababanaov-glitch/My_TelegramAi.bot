@@ -1,5 +1,6 @@
 import asyncio
 import os
+import urllib.parse
 from aiohttp import web, ClientSession
 from aiogram import Bot, Dispatcher, F, types
 from aiogram.filters import CommandStart
@@ -8,7 +9,7 @@ from aiogram.types import ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardMar
 # --- ДАННЫЕ БОТА И API ---
 BOT_TOKEN = "8932779425:AAEH0mqS6olP1cOaYIeB3ibt4u0MvPc7tac"
 
-# ВСТАВЬ СЮДА СВОЙ НОВЫЙ КЛЮЧ С САЙТА OPENROUTER.AI
+# Твой ключ OpenRouter
 OPENROUTER_API_KEY = "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"
 
 bot = Bot(token=BOT_TOKEN)
@@ -21,10 +22,12 @@ SYSTEM_PROMPT = (
     "Отвечай на любые вопросы прямо, точно и подробно."
 )
 
+# Главная клавиатура с кнопкой генерации картинок
 main_keyboard = ReplyKeyboardMarkup(
     keyboard=[
         [KeyboardButton(text="💬 Новый вопрос"), KeyboardButton(text="Сбросить историю")],
-        [KeyboardButton(text="Инструкция"), KeyboardButton(text="Настройки")]
+        [KeyboardButton(text="🎨 Создать картинку"), KeyboardButton(text="Настройки")],
+        [KeyboardButton(text="Инструкция")]
     ],
     resize_keyboard=True
 )
@@ -45,11 +48,21 @@ async def reset_history(message: types.Message):
 async def send_instruction(message: types.Message):
     text = (
         "📖 **Инструкция:**\n\n"
-        "• Напишите любой вопрос в чат.\n"
+        "• Напишите любой вопрос в чат для общения с ИИ.\n"
+        "• Нажмите **«🎨 Создать картинку»**, чтобы сгенерировать изображение по описанию.\n"
         "• **Сбросить историю** — очищает память диалога.\n"
-        "• **Настройки** — выбор скорости работы ИИ."
+        "• **Настройки** — выбор скорости и модели ИИ."
     )
     await message.answer(text, parse_mode="Markdown")
+
+@dp.message(F.text == "🎨 Создать картинку")
+async def image_mode_prompt(message: types.Message):
+    uid = message.from_user.id
+    if uid not in users_db:
+        users_db[uid] = {"mode": "fast", "history": []}
+    
+    users_db[uid]["mode"] = "image_wait"
+    await message.answer("🎨 Отправь мне текстовое описание (промпт) картинки, которую хочешь создать (например: *«киберпанк кот в неоновых огнях»*), и я её нарисую!", parse_mode="Markdown")
 
 @dp.message(F.text == "Настройки")
 async def settings_menu(message: types.Message):
@@ -78,7 +91,7 @@ async def set_mode(callback: types.CallbackQuery):
 
 @dp.message()
 async def process_ai_request(message: types.Message):
-    if message.text in ["💬 Новый вопрос", "Сбросить историю", "Инструкция", "Настройки"]:
+    if message.text in ["💬 Новый вопрос", "Сбросить историю", "Инструкция", "Настройки", "🎨 Создать картинку"]:
         return
 
     uid = message.from_user.id
@@ -86,6 +99,26 @@ async def process_ai_request(message: types.Message):
         users_db[uid] = {"mode": "fast", "history": []}
 
     user_data = users_db[uid]
+
+    # Если пользователь нажал кнопку создания картинки и прислал описание
+    if user_data.get("mode") == "image_wait":
+        prompt_text = message.text
+        user_data["mode"] = "fast"  # возвращаем обычный режим после запроса
+        
+        status_msg = await message.answer("🎨 Рисую картинку, подожди пару секунд...")
+        
+        # Генерация через качественный бесплатный движок Flux
+        encoded_prompt = urllib.parse.quote(prompt_text)
+        image_url = f"https://image.pollinations.ai/prompt/{encoded_prompt}?model=flux&nologo=true"
+        
+        try:
+            await message.answer_photo(photo=image_url, caption=f"🖼 **Запрос:** {prompt_text}", parse_mode="Markdown")
+            await status_msg.delete()
+        except Exception as err:
+            await status_msg.edit_text(f"❌ Ошибка генерации картинки: {err}")
+        return
+
+    # Обычный текстовый запрос к ИИ
     selected_model = "deepseek/deepseek-chat" if user_data["mode"] == "fast" else "deepseek/deepseek-r1"
 
     messages = [{"role": "system", "content": SYSTEM_PROMPT}] + user_data["history"]
