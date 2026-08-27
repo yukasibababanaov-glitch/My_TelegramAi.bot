@@ -9,8 +9,8 @@ from aiogram.filters import CommandStart
 from aiogram.types import ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardMarkup, InlineKeyboardButton
 
 # --- ДАННЫЕ БОТА И API ---
-BOT_TOKEN = "8932779425:AAEH0mqS6olP1cOaYIeB3ibt4u0MvPc7tac"
-OPENROUTER_API_KEY = "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"
+BOT_TOKEN = "8932779425:AAEE2aZ2otsVEQaLvXs-lH8MnyMZqMDnnU8"
+OPENROUTER_API_KEY = "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"
 
 # Канал для обязательной подписки
 CHANNEL_USERNAME = "@Ai_CHEAT_roblox"
