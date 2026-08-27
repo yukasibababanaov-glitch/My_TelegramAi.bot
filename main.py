@@ -21,7 +21,6 @@ dp = Dispatcher()
 
 users_db = {}
 
-# Обновленный промпт с верным ником @maksfunx
 SYSTEM_PROMPT = (
     "Твои создатели и разработчики — @zehoq и @maksfunx. "
     "Всегда говори, что тебя создали именно они, если спрашивают про авторов, создателей или разработчиков. "
@@ -42,7 +41,8 @@ async def check_sub(user_id: int) -> bool:
     try:
         member = await bot.get_chat_member(chat_id=CHANNEL_USERNAME, user_id=user_id)
         return member.status in ["creator", "administrator", "member"]
-    except Exception:
+    except Exception as e:
+        print(f"Ошибка проверки подписки (добавьте бота в админы канала): {e}")
         return False
 
 def get_sub_keyboard():
@@ -66,6 +66,25 @@ async def start_cmd(message: types.Message):
 
     await message.answer("Бот запущен и готов к работе!", reply_markup=main_keyboard)
 
+@dp.message(F.text == "💬 Новый вопрос")
+async def new_question_cmd(message: types.Message):
+    uid = message.from_user.id
+    if uid in users_db:
+        users_db[uid]["history"] = []
+        users_db[uid]["mode"] = "fast"
+    else:
+        users_db[uid] = {"mode": "fast", "history": []}
+
+    if not await check_sub(uid):
+        await message.answer(
+            f"⚠️ **Доступ ограничен!**\n\nДля использования бота подпишитесь на наш канал: {CHANNEL_URL}",
+            reply_markup=get_sub_keyboard(),
+            parse_mode="Markdown"
+        )
+        return
+
+    await message.answer("🔄 Чат сброшен! Задавай свой новый вопрос.", reply_markup=main_keyboard)
+
 @dp.callback_query(F.data == "check_subscription")
 async def check_sub_callback(callback: types.CallbackQuery):
     uid = callback.from_user.id
@@ -73,7 +92,7 @@ async def check_sub_callback(callback: types.CallbackQuery):
         await callback.message.delete()
         await callback.message.answer("✅ Подписка подтверждена! Бот готов к работе.", reply_markup=main_keyboard)
     else:
-        await callback.answer("❌ Вы всё ещё не подписаны на канал!", show_alert=True)
+        await callback.answer("❌ Вы всё ещё не подписаны на канал (или бот не назначен админом в канале)!", show_alert=True)
 
 @dp.message(F.text == "Сбросить историю")
 async def reset_history(message: types.Message):
@@ -95,7 +114,7 @@ async def send_instruction(message: types.Message):
         "📖 **Инструкция:**\n\n"
         "• Задавайте любые вопросы в чат.\n"
         "• Нажмите **«🎨 Создать картинку»**, чтобы сгенерировать фото.\n"
-        "• **Сбросить историю** — очистить контекст диалога.\n"
+        "• **💬 Новый вопрос** — сбросить контекст и начать новый диалог.\n"
         "• **Создатели бота:** @zehoq и @maksfunx"
     )
     await message.answer(text, parse_mode="Markdown", reply_markup=main_keyboard)
