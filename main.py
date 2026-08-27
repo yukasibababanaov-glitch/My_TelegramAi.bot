@@ -9,8 +9,9 @@ from aiogram.filters import CommandStart
 from aiogram.types import ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardMarkup, InlineKeyboardButton
 
 # --- ДАННЫЕ БОТА И API ---
-BOT_TOKEN = "8932779425:AAEE2aZ2otsVEQaLvXs-lH8MnyMZqMDnnU8"
-OPENROUTER_API_KEY = "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"
+# Замени токены на свои актуальные!
+BOT_TOKEN = "8932779425:AAEH0mqS6olP1cOaYIeB3ibt4u0MvPc7tac"
+OPENROUTER_API_KEY = "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"
 
 # Канал для обязательной подписки
 CHANNEL_USERNAME = "@Ai_CHEAT_roblox"
@@ -21,6 +22,7 @@ dp = Dispatcher()
 
 users_db = {}
 
+# Системный промпт (создатели и краткость)
 SYSTEM_PROMPT = (
     "Твои создатели и разработчики — @zehoq и @maksfunx. "
     "Всегда говори, что тебя создали именно они, если спрашивают про авторов, создателей или разработчиков. "
@@ -37,6 +39,7 @@ main_keyboard = ReplyKeyboardMarkup(
     resize_keyboard=True
 )
 
+# Функция проверки подписки на канал
 async def check_sub(user_id: int) -> bool:
     try:
         member = await bot.get_chat_member(chat_id=CHANNEL_USERNAME, user_id=user_id)
@@ -45,6 +48,7 @@ async def check_sub(user_id: int) -> bool:
         print(f"Ошибка проверки подписки: {e}")
         return False
 
+# Клавиатура для подписки
 def get_sub_keyboard():
     return InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="📢 Подписаться на канал", url=CHANNEL_URL)],
@@ -95,7 +99,7 @@ async def check_sub_callback(callback: types.CallbackQuery):
             pass
         await callback.message.answer("✅ Подписка подтверждена! Бот готов к работе.", reply_markup=main_keyboard)
     else:
-        await callback.answer("❌ Вы всё ещё не подписаны на канал (или бот не назначен администратором в канале)!", show_alert=True)
+        await callback.answer("❌ Вы всё ещё не подписаны на канал!", show_alert=True)
 
 @dp.message(F.text == "Сбросить историю")
 async def reset_history(message: types.Message):
@@ -183,6 +187,7 @@ async def process_ai_request(message: types.Message):
 
     user_data = users_db[uid]
 
+    # Генерация картинки
     if user_data.get("mode") == "image_wait":
         prompt_text = message.text
         user_data["mode"] = "fast"
@@ -227,6 +232,7 @@ async def process_ai_request(message: types.Message):
             await status_msg.edit_text(f"❌ Ошибка генерации картинки: {err}")
         return
 
+    # Ответ ИИ
     selected_model = "deepseek/deepseek-chat" if user_data["mode"] == "fast" else "deepseek/deepseek-r1"
 
     messages = [{"role": "system", "content": SYSTEM_PROMPT}] + user_data["history"]
@@ -234,7 +240,7 @@ async def process_ai_request(message: types.Message):
 
     status_msg = await message.answer("⏳ ИИ думает...")
 
-    url = "https://openrouter.ai/api/v1/chat/completions"
+    url = "https://openrouter.ai/ai/v1/chat/completions"
     headers = {
         "Authorization": f"Bearer {OPENROUTER_API_KEY}",
         "Content-Type": "application/json"
@@ -264,9 +270,11 @@ async def process_ai_request(message: types.Message):
     except Exception as err:
         await status_msg.edit_text(f"❌ Ошибка соединения: {err}")
 
+# Веб-сервер для Render
 async def handle_ping(request):
     return web.Response(text="Bot active")
 
+# Запуск бота и веб-сервера
 async def main():
     app = web.Application()
     app.router.add_get("/", handle_ping)
@@ -275,8 +283,12 @@ async def main():
     port = int(os.getenv("PORT", 8080))
     site = web.TCPSite(runner, "0.0.0.0", port)
     await site.start()
+    print(f"Web server started on port {port}")
 
     await dp.start_polling(bot)
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    try:
+        asyncio.run(main())
+    except (KeyboardInterrupt, SystemExit):
+        pass
