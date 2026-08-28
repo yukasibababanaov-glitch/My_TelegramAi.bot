@@ -141,7 +141,7 @@ async def settings_menu(message: types.Message):
         return
         
     current_mode = users_db.get(uid, {}).get("mode", "fast")
-    mode_label = "⚡ Быстрый (Gemma 2)" if current_mode == "fast" else "🧠 Глубокий (Llama 3.3)"
+    mode_label = "⚡ Быстрый (Llama 3.2)" if current_mode == "fast" else "🧠 Глубокий (Qwen 2.5)"
 
     inline_kb = InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="⚡ Быстрый режим", callback_data="mode_fast")],
@@ -196,7 +196,7 @@ async def process_ai_request(message: types.Message):
                     "Content-Type": "application/json"
                 }
                 payload = {
-                    "model": "google/gemma-2-9b-it:free",
+                    "model": "meta-llama/llama-3.2-11b-vision-instruct:free",
                     "messages": [
                         {"role": "system", "content": "Translate to English for image generation. Output ONLY English text."},
                         {"role": "user", "content": prompt_text}
@@ -226,7 +226,7 @@ async def process_ai_request(message: types.Message):
             await status_msg.edit_text(f"❌ Ошибка генерации: {err}")
         return
 
-    selected_model = "google/gemma-2-9b-it:free" if user_data["mode"] == "fast" else "meta-llama/llama-3.3-70b-instruct:free"
+    selected_model = "meta-llama/llama-3.2-11b-vision-instruct:free" if user_data["mode"] == "fast" else "qwen/qwen-2.5-coder-32b-instruct:free"
 
     messages = [{"role": "system", "content": SYSTEM_PROMPT}] + user_data["history"]
     messages.append({"role": "user", "content": message.text})
