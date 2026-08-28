@@ -11,7 +11,6 @@ from aiogram.types import ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardMar
 BOT_TOKEN = "8932779425:AAESaZzf6NjLaphaAnmhPwr3CKKwRlUXhVs"
 OPENROUTER_API_KEY = "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"
 
-# Канал для обязательной подписки
 CHANNEL_USERNAME = "@Ai_CHEAT_roblox"
 CHANNEL_URL = "https://t.me/Ai_CHEAT_roblox"
 
@@ -20,7 +19,6 @@ dp = Dispatcher()
 
 users_db = {}
 
-# Системный промпт
 SYSTEM_PROMPT = (
     "Отвечай кратко, точно, мгновенно и без лишней «воды». "
     "На короткие приветствия (например, «Пр», «Привет», «Салам») отвечай коротко и дружелюбно. "
@@ -37,7 +35,6 @@ main_keyboard = ReplyKeyboardMarkup(
     resize_keyboard=True
 )
 
-# Функция проверки подписки на канал
 async def check_sub(user_id: int) -> bool:
     try:
         member = await bot.get_chat_member(chat_id=CHANNEL_USERNAME, user_id=user_id)
@@ -46,7 +43,6 @@ async def check_sub(user_id: int) -> bool:
         print(f"Ошибка проверки подписки: {e}")
         return False
 
-# Клавиатура для подписки
 def get_sub_keyboard():
     return InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="📢 Подписаться на канал", url=CHANNEL_URL)],
@@ -118,7 +114,7 @@ async def send_instruction(message: types.Message):
     text = (
         "📖 **Инструкция:**\n\n"
         "• Задавай любой вопрос — ответ будет мгновенным.\n"
-        "• **🎨 Создать картинку** — отправь точное описание (например: «пацан в черной худи»).\n"
+        "• **🎨 Создать картинку** — отправь точное описание.\n"
         "• **💬 Новый вопрос** — сбросить тему и начать заново.\n"
         "• **Создатели бота:** @zehoq и @maksfunx"
     )
@@ -145,7 +141,7 @@ async def settings_menu(message: types.Message):
         return
         
     current_mode = users_db.get(uid, {}).get("mode", "fast")
-    mode_label = "⚡ Быстрый (DeepSeek Chat)" if current_mode == "fast" else "🧠 Глубокий (DeepSeek R1)"
+    mode_label = "⚡ Быстрый (Gemma 2)" if current_mode == "fast" else "🧠 Глубокий (Llama 3.3)"
 
     inline_kb = InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="⚡ Быстрый режим", callback_data="mode_fast")],
@@ -185,7 +181,6 @@ async def process_ai_request(message: types.Message):
 
     user_data = users_db[uid]
 
-    # --- ГЕНЕРАЦИЯ КАРТИНКИ ---
     if user_data.get("mode") == "image_wait":
         prompt_text = message.text
         user_data["mode"] = "fast"
@@ -201,9 +196,9 @@ async def process_ai_request(message: types.Message):
                     "Content-Type": "application/json"
                 }
                 payload = {
-                    "model": "deepseek/deepseek-chat:free",
+                    "model": "google/gemma-2-9b-it:free",
                     "messages": [
-                        {"role": "system", "content": "Translate the user query to precise English prompt for image generation. Output ONLY the English translation, no other text."},
+                        {"role": "system", "content": "Translate to English for image generation. Output ONLY English text."},
                         {"role": "user", "content": prompt_text}
                     ]
                 }
@@ -214,7 +209,6 @@ async def process_ai_request(message: types.Message):
         except Exception:
             pass
 
-        # Улучшение качества промпта
         enhanced_prompt = f"{translated_prompt}, highly detailed, sharp focus, 4k resolution, high quality"
         seed = random.randint(1, 999999)
         encoded_prompt = urllib.parse.quote(enhanced_prompt)
@@ -232,9 +226,7 @@ async def process_ai_request(message: types.Message):
             await status_msg.edit_text(f"❌ Ошибка генерации: {err}")
         return
 
-    # --- БЫСТРЫЙ ОТВЕТ ИИ БЕЗ ЛИМИТОВ ---
-    # Используем БЕСПЛАТНЫЕ модели без ограничений по балансу
-    selected_model = "deepseek/deepseek-chat:free" if user_data["mode"] == "fast" else "deepseek/deepseek-r1:free"
+    selected_model = "google/gemma-2-9b-it:free" if user_data["mode"] == "fast" else "meta-llama/llama-3.3-70b-instruct:free"
 
     messages = [{"role": "system", "content": SYSTEM_PROMPT}] + user_data["history"]
     messages.append({"role": "user", "content": message.text})
@@ -249,7 +241,7 @@ async def process_ai_request(message: types.Message):
     payload = {
         "model": selected_model,
         "messages": messages,
-        "max_tokens": 500
+        "max_tokens": 400
     }
 
     try:
@@ -271,11 +263,9 @@ async def process_ai_request(message: types.Message):
     except Exception as err:
         await status_msg.edit_text(f"❌ Ошибка соединения: {err}")
 
-# Веб-сервер для Render
 async def handle_ping(request):
     return web.Response(text="Bot active")
 
-# Запуск бота
 async def main():
     app = web.Application()
     app.router.add_get("/", handle_ping)
