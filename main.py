@@ -9,7 +9,6 @@ from aiogram.filters import CommandStart
 from aiogram.types import ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardMarkup, InlineKeyboardButton
 
 # --- ДАННЫЕ БОТА И API ---
-# Замени токены на свои актуальные!
 BOT_TOKEN = "8932779425:AAEH0mqS6olP1cOaYIeB3ibt4u0MvPc7tac"
 OPENROUTER_API_KEY = "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"
 
@@ -22,12 +21,12 @@ dp = Dispatcher()
 
 users_db = {}
 
-# Системный промпт (создатели и краткость)
+# Исправленный системный промпт: строго запрещает упоминать авторов без прямого вопроса
 SYSTEM_PROMPT = (
-    "Твои создатели и разработчики — @zehoq и @maksfunx. "
-    "Всегда говори, что тебя создали именно они, если спрашивают про авторов, создателей или разработчиков. "
     "Отвечай кратко, точно, без лишней «воды» и без длинных лекций. "
-    "На короткие приветствия (например, «Пр», «Привет», «Салам») отвечай коротко и дружелюбно."
+    "На короткие приветствия (например, «Пр», «Привет», «Салам») отвечай коротко и дружелюбно. "
+    "ТОЛЬКО ЕСЛИ пользователь напрямую спрашивает, кто тебя создал, кто твои авторы, создатели или разработчики — отвечай: «Мои создатели и разработчики — @zehoq и @maksfunx». "
+    "Во всех остальных случаях И В ЛЮБЫХ ДРУГИХ ВОПРОСАХ категорически ЗАПРЕЩЕНО упоминать авторов, создателей и их юзернеймы!"
 )
 
 main_keyboard = ReplyKeyboardMarkup(
@@ -240,7 +239,8 @@ async def process_ai_request(message: types.Message):
 
     status_msg = await message.answer("⏳ ИИ думает...")
 
-    url = "https://openrouter.ai/ai/v1/chat/completions"
+    # Исправленный правильный URL для OpenRouter:
+    url = "https://openrouter.ai/api/v1/chat/completions"
     headers = {
         "Authorization": f"Bearer {OPENROUTER_API_KEY}",
         "Content-Type": "application/json"
@@ -292,3 +292,4 @@ if __name__ == "__main__":
         asyncio.run(main())
     except (KeyboardInterrupt, SystemExit):
         pass
+
