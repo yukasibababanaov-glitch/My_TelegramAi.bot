@@ -9,7 +9,7 @@ from aiogram.filters import CommandStart
 from aiogram.types import ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardMarkup, InlineKeyboardButton
 
 # --- ДАННЫЕ БОТА И API ---
-BOT_TOKEN = "8932779425:AAEH0mqS6olP1cOaYIeB3ibt4u0MvPc7tac"
+BOT_TOKEN = "8932779425:AAESaZzf6NjLaphaAnmhPwr3CKKwRlUXhVs"
 OPENROUTER_API_KEY = "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"
 
 # Канал для обязательной подписки
@@ -21,7 +21,7 @@ dp = Dispatcher()
 
 users_db = {}
 
-# Исправленный системный промпт: строго запрещает упоминать авторов без прямого вопроса
+# Системный промпт
 SYSTEM_PROMPT = (
     "Отвечай кратко, точно, без лишней «воды» и без длинных лекций. "
     "На короткие приветствия (например, «Пр», «Привет», «Салам») отвечай коротко и дружелюбно. "
@@ -239,7 +239,6 @@ async def process_ai_request(message: types.Message):
 
     status_msg = await message.answer("⏳ ИИ думает...")
 
-    # Исправленный правильный URL для OpenRouter:
     url = "https://openrouter.ai/api/v1/chat/completions"
     headers = {
         "Authorization": f"Bearer {OPENROUTER_API_KEY}",
