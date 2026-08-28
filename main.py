@@ -141,7 +141,7 @@ async def settings_menu(message: types.Message):
         return
         
     current_mode = users_db.get(uid, {}).get("mode", "fast")
-    mode_label = "⚡ Быстрый (Llama 3.2)" if current_mode == "fast" else "🧠 Глубокий (Qwen 2.5)"
+    mode_label = "⚡ Быстрый режим" if current_mode == "fast" else "🧠 Глубокий режим"
 
     inline_kb = InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="⚡ Быстрый режим", callback_data="mode_fast")],
@@ -181,35 +181,15 @@ async def process_ai_request(message: types.Message):
 
     user_data = users_db[uid]
 
+    # --- РЕЖИМ КАРТИНКИ ---
     if user_data.get("mode") == "image_wait":
         prompt_text = message.text
         user_data["mode"] = "fast"
         
         status_msg = await message.answer("🎨 Рисую чёткое изображение...")
         
-        translated_prompt = prompt_text
-        try:
-            async with ClientSession() as session:
-                url = "https://openrouter.ai/api/v1/chat/completions"
-                headers = {
-                    "Authorization": f"Bearer {OPENROUTER_API_KEY}",
-                    "Content-Type": "application/json"
-                }
-                payload = {
-                    "model": "meta-llama/llama-3.2-11b-vision-instruct:free",
-                    "messages": [
-                        {"role": "system", "content": "Translate to English for image generation. Output ONLY English text."},
-                        {"role": "user", "content": prompt_text}
-                    ]
-                }
-                async with session.post(url, headers=headers, json=payload) as resp:
-                    if resp.status == 200:
-                        tr_data = await resp.json()
-                        translated_prompt = tr_data["choices"][0]["message"]["content"].strip()
-        except Exception:
-            pass
-
-        enhanced_prompt = f"{translated_prompt}, highly detailed, sharp focus, 4k resolution, high quality"
+        # Генерация напрямую через Pollinations FLUX (без внешних переписчиков)
+        enhanced_prompt = f"boy, guy, {prompt_text}, highly detailed, sharp focus, 4k resolution, high quality"
         seed = random.randint(1, 999999)
         encoded_prompt = urllib.parse.quote(enhanced_prompt)
         image_url = f"https://image.pollinations.ai/prompt/{encoded_prompt}?model=flux&seed={seed}&width=1024&height=1024&nologo=true"
@@ -226,7 +206,12 @@ async def process_ai_request(message: types.Message):
             await status_msg.edit_text(f"❌ Ошибка генерации: {err}")
         return
 
-    selected_model = "meta-llama/llama-3.2-11b-vision-instruct:free" if user_data["mode"] == "fast" else "qwen/qwen-2.5-coder-32b-instruct:free"
+    # --- СПИСОК БЕСПЛАТНЫХ МОДЕЛЕЙ ДЛЯ НАДЁЖНОСТИ ---
+    models_to_try = [
+        "meta-llama/llama-3.2-11b-vision-instruct:free",
+        "qwen/qwen-2.5-coder-32b-instruct:free",
+        "mistralai/mistral-7b-instruct:free"
+    ]
 
     messages = [{"role": "system", "content": SYSTEM_PROMPT}] + user_data["history"]
     messages.append({"role": "user", "content": message.text})
@@ -238,30 +223,30 @@ async def process_ai_request(message: types.Message):
         "Authorization": f"Bearer {OPENROUTER_API_KEY}",
         "Content-Type": "application/json"
     }
-    payload = {
-        "model": selected_model,
-        "messages": messages,
-        "max_tokens": 400
-    }
 
-    try:
-        async with ClientSession() as session:
-            async with session.post(url, headers=headers, json=payload) as resp:
-                data = await resp.json()
-                
-                if resp.status != 200:
-                    err_msg = data.get("error", {}).get("message", "Ошибка API")
-                    await status_msg.edit_text(f"❌ Ошибка {resp.status}: {err_msg}")
-                    return
+    # Пробуем по очереди, чтобы точно ответить
+    async with ClientSession() as session:
+        for model in models_to_try:
+            payload = {
+                "model": model,
+                "messages": messages,
+                "max_tokens": 400
+            }
+            try:
+                async with session.post(url, headers=headers, json=payload) as resp:
+                    if resp.status == 200:
+                        data = await resp.json()
+                        answer_text = data["choices"][0]["message"]["content"]
+                        
+                        user_data["history"].append({"role": "user", "content": message.text})
+                        user_data["history"].append({"role": "assistant", "content": answer_text})
 
-                answer_text = data["choices"][0]["message"]["content"]
-                
-                user_data["history"].append({"role": "user", "content": message.text})
-                user_data["history"].append({"role": "assistant", "content": answer_text})
+                        await status_msg.edit_text(answer_text)
+                        return
+            except Exception:
+                continue
 
-                await status_msg.edit_text(answer_text)
-    except Exception as err:
-        await status_msg.edit_text(f"❌ Ошибка соединения: {err}")
+    await status_msg.edit_text("❌ Все серверы перегружены, попробуй через пару секунд.")
 
 async def handle_ping(request):
     return web.Response(text="Bot active")
