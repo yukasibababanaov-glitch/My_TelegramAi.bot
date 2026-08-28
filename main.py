@@ -1,6 +1,5 @@
 import asyncio
 import os
-import json
 import urllib.parse
 import random
 from aiohttp import web, ClientSession
@@ -23,7 +22,7 @@ users_db = {}
 
 # Системный промпт
 SYSTEM_PROMPT = (
-    "Отвечай кратко, точно, без лишней «воды» и без длинных лекций. "
+    "Отвечай кратко, точно, мгновенно и без лишней «воды». "
     "На короткие приветствия (например, «Пр», «Привет», «Салам») отвечай коротко и дружелюбно. "
     "ТОЛЬКО ЕСЛИ пользователь напрямую спрашивает, кто тебя создал, кто твои авторы, создатели или разработчики — отвечай: «Мои создатели и разработчики — @zehoq и @maksfunx». "
     "Во всех остальных случаях И В ЛЮБЫХ ДРУГИХ ВОПРОСАХ категорически ЗАПРЕЩЕНО упоминать авторов, создателей и их юзернеймы!"
@@ -67,7 +66,7 @@ async def start_cmd(message: types.Message):
         )
         return
 
-    await message.answer("Бот запущен и готов к работе!", reply_markup=main_keyboard)
+    await message.answer("⚡ Бот запущен и готов к быстрой работе!", reply_markup=main_keyboard)
 
 @dp.message(F.text == "💬 Новый вопрос")
 async def new_question_cmd(message: types.Message):
@@ -86,7 +85,7 @@ async def new_question_cmd(message: types.Message):
         )
         return
 
-    await message.answer("🔄 Чат сброшен! Задавай свой новый вопрос.", reply_markup=main_keyboard)
+    await message.answer("🔄 Чат сброшен! Задавай новый вопрос.", reply_markup=main_keyboard)
 
 @dp.callback_query(F.data == "check_subscription")
 async def check_sub_callback(callback: types.CallbackQuery):
@@ -108,7 +107,7 @@ async def reset_history(message: types.Message):
         return
     if uid in users_db:
         users_db[uid]["history"] = []
-    await message.answer("🧹 История очищена. Контекст сброшен.", reply_markup=main_keyboard)
+    await message.answer("🧹 История очищена.", reply_markup=main_keyboard)
 
 @dp.message(F.text == "Инструкция")
 async def send_instruction(message: types.Message):
@@ -118,9 +117,9 @@ async def send_instruction(message: types.Message):
         return
     text = (
         "📖 **Инструкция:**\n\n"
-        "• Задавайте любые вопросы в чат.\n"
-        "• Нажмите **«🎨 Создать картинку»**, чтобы сгенерировать фото.\n"
-        "• **💬 Новый вопрос** — сбросить контекст и начать диалог заново.\n"
+        "• Задавай любой вопрос — ответ будет мгновенным.\n"
+        "• **🎨 Создать картинку** — отправь точное описание (например: «пацан в черной худи»).\n"
+        "• **💬 Новый вопрос** — сбросить тему и начать заново.\n"
         "• **Создатели бота:** @zehoq и @maksfunx"
     )
     await message.answer(text, parse_mode="Markdown", reply_markup=main_keyboard)
@@ -136,7 +135,7 @@ async def image_mode_prompt(message: types.Message):
         users_db[uid] = {"mode": "fast", "history": []}
     
     users_db[uid]["mode"] = "image_wait"
-    await message.answer("🎨 Отправь текстовое описание картинки, и я её нарисую!", parse_mode="Markdown")
+    await message.answer("🎨 **Отправь описание картинки.**\n Например: *пацан в крутых очках*, *робот в городе*", parse_mode="Markdown")
 
 @dp.message(F.text == "Настройки")
 async def settings_menu(message: types.Message):
@@ -186,12 +185,12 @@ async def process_ai_request(message: types.Message):
 
     user_data = users_db[uid]
 
-    # Генерация картинки
+    # --- ГЕНЕРАЦИЯ КАРТИНКИ ---
     if user_data.get("mode") == "image_wait":
         prompt_text = message.text
         user_data["mode"] = "fast"
         
-        status_msg = await message.answer("🎨 Генерирую изображение...")
+        status_msg = await message.answer("🎨 Рисую чёткое изображение...")
         
         translated_prompt = prompt_text
         try:
@@ -202,9 +201,9 @@ async def process_ai_request(message: types.Message):
                     "Content-Type": "application/json"
                 }
                 payload = {
-                    "model": "deepseek/deepseek-chat",
+                    "model": "deepseek/deepseek-chat:free",
                     "messages": [
-                        {"role": "system", "content": "Translate to English for image generation. Return ONLY translated text."},
+                        {"role": "system", "content": "Translate the user query to precise English prompt for image generation. Output ONLY the English translation, no other text."},
                         {"role": "user", "content": prompt_text}
                     ]
                 }
@@ -215,9 +214,11 @@ async def process_ai_request(message: types.Message):
         except Exception:
             pass
 
+        # Улучшение качества промпта
+        enhanced_prompt = f"{translated_prompt}, highly detailed, sharp focus, 4k resolution, high quality"
         seed = random.randint(1, 999999)
-        encoded_prompt = urllib.parse.quote(translated_prompt)
-        image_url = f"https://image.pollinations.ai/prompt/{encoded_prompt}?model=flux&seed={seed}&nologo=true"
+        encoded_prompt = urllib.parse.quote(enhanced_prompt)
+        image_url = f"https://image.pollinations.ai/prompt/{encoded_prompt}?model=flux&seed={seed}&width=1024&height=1024&nologo=true"
         
         try:
             await message.answer_photo(
@@ -228,16 +229,17 @@ async def process_ai_request(message: types.Message):
             )
             await status_msg.delete()
         except Exception as err:
-            await status_msg.edit_text(f"❌ Ошибка генерации картинки: {err}")
+            await status_msg.edit_text(f"❌ Ошибка генерации: {err}")
         return
 
-    # Ответ ИИ
-    selected_model = "deepseek/deepseek-chat" if user_data["mode"] == "fast" else "deepseek/deepseek-r1"
+    # --- БЫСТРЫЙ ОТВЕТ ИИ БЕЗ ЛИМИТОВ ---
+    # Используем БЕСПЛАТНЫЕ модели без ограничений по балансу
+    selected_model = "deepseek/deepseek-chat:free" if user_data["mode"] == "fast" else "deepseek/deepseek-r1:free"
 
     messages = [{"role": "system", "content": SYSTEM_PROMPT}] + user_data["history"]
     messages.append({"role": "user", "content": message.text})
 
-    status_msg = await message.answer("⏳ ИИ думает...")
+    status_msg = await message.answer("⚡")
 
     url = "https://openrouter.ai/api/v1/chat/completions"
     headers = {
@@ -247,7 +249,7 @@ async def process_ai_request(message: types.Message):
     payload = {
         "model": selected_model,
         "messages": messages,
-        "max_tokens": 1000
+        "max_tokens": 500
     }
 
     try:
@@ -256,7 +258,7 @@ async def process_ai_request(message: types.Message):
                 data = await resp.json()
                 
                 if resp.status != 200:
-                    err_msg = data.get("error", {}).get("message", "Неизвестная ошибка")
+                    err_msg = data.get("error", {}).get("message", "Ошибка API")
                     await status_msg.edit_text(f"❌ Ошибка {resp.status}: {err_msg}")
                     return
 
@@ -273,7 +275,7 @@ async def process_ai_request(message: types.Message):
 async def handle_ping(request):
     return web.Response(text="Bot active")
 
-# Запуск бота и веб-сервера
+# Запуск бота
 async def main():
     app = web.Application()
     app.router.add_get("/", handle_ping)
@@ -282,7 +284,6 @@ async def main():
     port = int(os.getenv("PORT", 8080))
     site = web.TCPSite(runner, "0.0.0.0", port)
     await site.start()
-    print(f"Web server started on port {port}")
 
     await dp.start_polling(bot)
 
